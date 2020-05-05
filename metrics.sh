@@ -1,6 +1,7 @@
 #!/bin/bash
 
-records=512000
+#records=512000
+records=16384
 size=1024
 servers="testing-kafka-dev01:9092,testing-kafka-dev02:9092,testing-kafka-dev03:9092"
 topic="test"
@@ -10,7 +11,7 @@ echo "records, size, acks, compression, inflight, batch, linger, time, batch-siz
 for acks in -1 0 1; do
     for compression in "snappy" "none"; do
         for inflight in 1 5 10; do
-            for batch in 0 1048576 8388608 33554432; do
+            for batch in 0 1048576 5000000; do
                 for linger in 0 20 1000; do
                     start=$(date +%s)
                     metrics=$(kafka-producer-perf-test --topic ${topic} --num-records ${records} --record-size ${size} --throughput -1 --print-metrics --producer-props bootstrap.servers=${servers} client.id=test acks=${acks} compression.type=${compression} max.in.flight.requests.per.connection=${inflight} batch.size=${batch} linger.ms=${linger}) 
