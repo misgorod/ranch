@@ -2,6 +2,57 @@ import json
 import re
 
 
+exclude_keys = [
+    'producer-node_request-latency-avg_-1',
+    'producer-node_request-latency-avg_-2',
+    'producer-node_request-latency-avg_-3',
+    'producer-node_incoming-byte-rate_-1',
+    'producer-node_incoming-byte-rate_-2',
+    'producer-node_incoming-byte-rate_-3',
+    'producer-node_incoming-byte-total_-1',
+    'producer-node_incoming-byte-total_-2',
+    'producer-node_incoming-byte-total_-3',
+    'producer-node_outgoing-byte-rate_-1',
+    'producer-node_outgoing-byte-rate_-2',
+    'producer-node_outgoing-byte-rate_-3',
+    'producer-node_outgoing-byte-total_-1',
+    'producer-node_outgoing-byte-total_-2',
+    'producer-node_outgoing-byte-total_-3',
+    'producer-node_request-latency-max_-1',
+    'producer-node_request-latency-max_-2',
+    'producer-node_request-latency-max_-3',
+    'producer-node_request-rate_-1',
+    'producer-node_request-rate_-2',
+    'producer-node_request-rate_-3',
+    'producer-node_request-size-avg_-1',
+    'producer-node_request-size-avg_-2',
+    'producer-node_request-size-avg_-3',
+    'producer-node_request-size-max_-1',
+    'producer-node_request-size-max_-2',
+    'producer-node_request-size-max_-3',
+    'producer-node_request-total_-1',
+    'producer-node_request-total_-2',
+    'producer-node_request-total_-3',
+    'producer-node_response-rate_-1',
+    'producer-node_response-rate_-2',
+    'producer-node_response-rate_-3',
+    'producer-node_response-total_-1',
+    'producer-node_response-total_-2',
+    'producer-node_response-total_-3',
+    'producer_reauthentication-latency-avg',
+    'producer_reauthentication-latency-max',
+    'producer_successful-authentication-no-reauth-total',
+    'producer_successful-authentication-rate',
+    'producer_successful-authentication-total',
+    'producer_successful-reauthentication-rate',
+    'producer_successful-reauthentication-total',
+    'producer_failed-authentication-rate',
+    'producer_failed-authentication-total',
+    'producer_failed-reauthentication-rate',
+    'producer_failed-reauthentication-total',
+]
+
+
 def delete_keys(m, keys):
     for key in keys:
         if key in m:
@@ -74,62 +125,11 @@ def process_files(files):
         with open(file, 'r+') as f:
             for line in f:
                 line = line.strip()
-                if line == 'start':
-                    delete_keys(metric, [
-                        'producer-node_request-latency-avg_-1',
-                        'producer-node_request-latency-avg_-2',
-                        'producer-node_request-latency-avg_-3',
-                        'producer-node_incoming-byte-rate_-1',
-                        'producer-node_incoming-byte-rate_-2',
-                        'producer-node_incoming-byte-rate_-3',
-                        'producer-node_incoming-byte-total_-1',
-                        'producer-node_incoming-byte-total_-2',
-                        'producer-node_incoming-byte-total_-3',
-                        'producer-node_outgoing-byte-rate_-1',
-                        'producer-node_outgoing-byte-rate_-2',
-                        'producer-node_outgoing-byte-rate_-3',
-                        'producer-node_outgoing-byte-total_-1',
-                        'producer-node_outgoing-byte-total_-2',
-                        'producer-node_outgoing-byte-total_-3',
-                        'producer-node_request-latency-max_-1',
-                        'producer-node_request-latency-max_-2',
-                        'producer-node_request-latency-max_-3',
-                        'producer-node_request-rate_-1',
-                        'producer-node_request-rate_-2',
-                        'producer-node_request-rate_-3',
-                        'producer-node_request-size-avg_-1',
-                        'producer-node_request-size-avg_-2',
-                        'producer-node_request-size-avg_-3',
-                        'producer-node_request-size-max_-1',
-                        'producer-node_request-size-max_-2',
-                        'producer-node_request-size-max_-3',
-                        'producer-node_request-total_-1',
-                        'producer-node_request-total_-2',
-                        'producer-node_request-total_-3',
-                        'producer-node_response-rate_-1',
-                        'producer-node_response-rate_-2',
-                        'producer-node_response-rate_-3',
-                        'producer-node_response-total_-1',
-                        'producer-node_response-total_-2',
-                        'producer-node_response-total_-3',
-                        'producer_reauthentication-latency-avg',
-                        'producer_reauthentication-latency-max',
-                        'producer_successful-authentication-no-reauth-total',
-                        'producer_successful-authentication-rate',
-                        'producer_successful-authentication-total',
-                        'producer_successful-reauthentication-rate',
-                        'producer_successful-reauthentication-total',
-                        'producer_failed-authentication-rate',
-                        'producer_failed-authentication-total',
-                        'producer_failed-reauthentication-rate',
-                        'producer_failed-reauthentication-total',
-                    ])
 
+                if re.match(r'.*,"snappy",.*', line) or re.match(r'.*,"none",.*', line):
+                    delete_keys(metric, exclude_keys)
                     metrics.append(metric)
                     metric = {}
-                elif re.match(r'.*,"snappy",.*', line):
-                    metric = parse_header(metric, line)
-                elif re.match(r'.*,"none",.*', line):
                     metric = parse_header(metric, line)
                 elif re.match(r'.*records sent.*', line):
                     metric = parse_metric_result(metric, line)
@@ -139,7 +139,7 @@ def process_files(files):
 
 
 def main():
-    metrics = process_files(['metrics-raw-500', 'metrics-raw-wo-timeout'])
+    metrics = process_files(['metrics-raw-500', 'metrics-raw-wo-timeout', 'metrics-raw-fix-timeout'])
     
     print(json.dumps(metrics).replace("NaN" , "null"))
 
