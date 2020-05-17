@@ -1,5 +1,9 @@
+import csv
 import json
 import re
+import pandas as pd
+import numpy as np
+from sklearn.datasets import load_iris
 
 
 exclude_keys = [
@@ -50,6 +54,115 @@ exclude_keys = [
     'producer_failed-authentication-total',
     'producer_failed-reauthentication-rate',
     'producer_failed-reauthentication-total',
+
+    "producer-topic_record-send-total",
+    "producer-topic_record-send-rate",
+    "producer-topic_record-retry-total",
+    "producer-topic_record-retry-rate",
+    "producer-topic_compression-rate",
+    "producer-topic_byte-total",
+    "producer-topic_byte-rate",
+    "producer-node_response-total_3",
+    "producer-node_response-total_2",
+    "producer-node_response-total_1",
+    "producer-node_response-rate_3",
+    "producer-node_response-rate_2",
+    "producer-node_response-rate_1",
+    "producer-node_request-total_3",
+    "producer-node_request-total_2",
+    "producer-node_request-total_1",
+    "producer-node_request-size-max_3",
+    "producer-node_request-size-max_2",
+    "producer-node_request-size-max_1",
+    "producer-node_request-size-avg_3",
+    "producer-node_request-size-avg_2",
+    "producer-node_request-size-avg_1",
+    "producer-node_request-rate_3",
+    "producer-node_request-rate_2",
+    "producer-node_request-rate_1",
+    "producer-node_request-latency-max_3",
+    "producer-node_request-latency-max_2",
+    "producer-node_request-latency-max_1",
+    "producer-node_request-latency-avg_3",
+    "producer-node_request-latency-avg_2",
+    "producer-node_request-latency-avg_1",
+    "producer-node_outgoing-byte-total_3",
+    "producer-node_outgoing-byte-total_2",
+    "producer-node_outgoing-byte-total_1",
+    "producer-node_outgoing-byte-rate_3",
+    "producer-node_outgoing-byte-rate_2",
+    "producer-node_outgoing-byte-rate_1",
+    "producer-node_incoming-byte-total_3",
+    "producer-node_incoming-byte-total_2",
+    "producer-node_incoming-byte-total_1",
+    "producer-node_incoming-byte-rate_3",
+    "producer-node_incoming-byte-rate_2",
+    "producer-node_incoming-byte-rate_1",
+    "producer_select-total",
+    "producer_response-total",
+    "producer_response-rate",
+    "producer_request-total",
+    "producer_request-size-max",
+    "producer_request-size-avg",
+    "producer_request-rate",
+    "producer_record-size-max",
+    "producer_record-size-avg",
+    "producer_record-send-total",
+    "producer_record-send-rate",
+    "producer_record-retry-total",
+    "producer_record-queue-time-max",
+    "producer_record-error-total",
+    "producer_record-error-rate",
+    "producer_outgoing-byte-total",
+    "producer_outgoing-byte-rate",
+    "producer_network-io-total",
+    "producer_metadata-age",
+    "producer_iotime-total",
+    "producer_io-waittime-total",
+    "producer_io-time-ns-avg",
+    "producer_incoming-byte-total",
+    "producer_connection-creation-total",
+    "producer_connection-creation-rate",
+    "producer_connection-count",
+    "producer_connection-close-total",
+    "producer_bufferpool-wait-time-total",
+    "producer_batch-split-total",
+    "producer_batch-size-max",
+    "latency_999th_ms",
+    "latency_99th_ms",
+    "latency_95th_ms",
+    "producer-topic_record-error-rate",
+    "producer-topic_record-error-total",
+    "producer_select-rate",
+    "producer_request-latency-max",
+    "producer_records-per-request-avg",
+    "producer_record-retry-rate",
+    "producer_produce-throttle-time-max",
+    "producer_produce-throttle-time-avg",
+    "producer_network-io-rate",
+    "producer_io-wait-time-ns-avg",
+    "producer_io-ratio",
+    "producer_io-wait-ratio",
+    "producer_incoming-byte-rate",
+    "producer_connection-close-rate",
+    "producer_compression-rate-avg",
+    "producer_bufferpool-wait-ratio",
+    "producer_buffer-total-bytes",
+    "producer_buffer-exhausted-total",
+    "producer_buffer-exhausted-rate",
+    "producer_buffer-available-bytes",
+    "latency_50th_ms",
+    "latency_max_ms",
+    "records_persec",
+    "producer_batch-split-rate",
+    "producer_waiting-threads",
+    "producer_requests-in-flight",
+    "producer_request-latency-avg",
+    "producer_record-queue-time-avg",
+
+    "producer_batch-size-avg",
+    "producer_record-queue-time-avg",
+    "time_ms",
 ]
 
 
@@ -109,12 +222,23 @@ def parse_metric(metric, line):
             raise Exception(f'producer node metrics not matched: {line}')
 
         metric[f"producer-node_{match.group(1)}_{match.group(2)}"] = try_float(match.group(3))
+    elif re.match(r'producer-topic-metrics.*', line):
+        match = re.match(r'producer-topic-metrics:([\w\-]+):\{client-id=test, topic=test-([\w\-]+)\}\s+: (.*)', line)
+        if not match:
+            raise Exception(f'producer topic metrics not matched: {line}')
+
+        metric[f"producer-topic_{match.group(1)}"] = try_float(match.group(3))
+        metric["topic"] = match.group(2)
     elif re.match(r'[\w\-]+-metrics.*', line):
         match = re.match(r'([\w\-]+)-metrics:([\w\-]+):\{.*\}\s+: (.*)',line)
         if not match:
-            raise Exception(f'producer node metrics not matched: {line}')
+            raise Exception(f'producer metrics not matched: {line}')
 
         metric[f"{match.group(1)}_{match.group(2)}"] = try_float(match.group(3))
+    elif line == "":
+        return metric
+    else:
+        raise Exception(f"line not matched by any pattern: {line}")
     return metric
 
 
@@ -126,7 +250,11 @@ def process_files(files):
             for line in f:
                 line = line.strip()
 
-                if re.match(r'.*,"snappy",.*', line) or re.match(r'.*,"none",.*', line):
+                if re.match(r'.*,"snappy",.*', line) or re.match(r'.*,"none",.*', line) or re.match(r'.*,"gzip",.*', line):
+                    # if 'producer_batch-size-avg' in metric and 'batch_b' in metric and 'mb_persec' in metric and metric['batch_b'] != 0:
+                    #     metric['batch_ratio'] = float(metric['producer_batch-size-avg']) / float(metric['batch_b'])
+                    # else:
+                    #     metric['batch_ratio'] = 0
                     delete_keys(metric, exclude_keys)
                     metrics.append(metric)
                     metric = {}
@@ -138,10 +266,45 @@ def process_files(files):
     return metrics
 
 
+def find_correlation(metrics):
+    df = pd.DataFrame(metrics)
+
+    print(); print(df)
+
+    corr_matrix = df.corr().abs()
+    print(); print(corr_matrix)
+
+    pd.set_option("display.max_rows", None, "display.max_columns", None)
+
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape),
+                                      k=1).astype(np.bool))
+    print(); print(upper)
+
+    to_drop = [column for column in reversed(upper.columns) if any(upper[column] > 0.9)]
+    print(); print(to_drop)
+    print(len(to_drop))
+
+    for column in to_drop:
+        print(f'"{column}",')
+
+    # df1 = df.drop(df.columns[to_drop], axis=1)
+    # print(); print(df1)
+
+
 def main():
-    metrics = process_files(['metrics-raw-500', 'metrics-raw-wo-timeout', 'metrics-raw-fix-timeout'])
-    
-    print(json.dumps(metrics).replace("NaN" , "null"))
+    metrics = process_files(['metrics-1.data', 'metrics-2.data'])
+    metrics.pop(0)
+
+    with open('metrics.json', 'w') as f:
+        json.dump(metrics, f)
+
+    with open('metrics.csv', 'w') as f:
+        writer = csv.DictWriter(f, metrics[1].keys())
+        writer.writeheader()
+        for metric in metrics:
+            writer.writerow(metric)
+
+    find_correlation(metrics)
 
 
 if __name__ == '__main__':
