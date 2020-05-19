@@ -1,11 +1,19 @@
 import numpy as np
-from .acks import Acks
-from .order import Order
+import os
+from ranch.acks import Acks
+from ranch.order import Order
+import sys
 
 
 class Linger():
     def __init__(self):
-        self.linger_funcs = np.load('lingers.npy', allow_pickle=True)
+        try:
+            basepath = sys._MEIPASS
+        except Exception:
+            basepath = os.path.abspath(".")
+        filename = 'funcs/lingers.npy'
+        filename = os.path.join(basepath, filename)
+        self.linger_funcs = np.load(filename, allow_pickle=True)
 
     def get_linger(self, message_size: int, acks: Acks, order: Order) -> int:
         func = self.linger_funcs.item()[(acks.value, order.value)]

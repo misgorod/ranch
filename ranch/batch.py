@@ -1,11 +1,19 @@
 import numpy as np
-from .acks import Acks
-from .order import Order
+import os
+from ranch.acks import Acks
+from ranch.order import Order
+import sys
 
 
 class Batch():
     def __init__(self):
-        self.batch_funcs = np.load('batches.npy', allow_pickle=True)
+        try:
+            basepath = sys._MEIPASS
+        except Exception:
+            basepath = os.path.abspath(".")
+        filename = 'funcs/batches.npy'
+        filename = os.path.join(basepath, filename)
+        self.batch_funcs = np.load(filename, allow_pickle=True)
 
     def get_batch(self, message_size: int, acks: Acks, order: Order) -> int:
         func = self.batch_funcs.item()[(acks.value, order.value)]
