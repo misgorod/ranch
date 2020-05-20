@@ -1,17 +1,17 @@
 from ranch.acks import Acks
-from ranch.batch import Batch
-from ranch.linger import Linger
+from ranch.interpolation import Interpolation, FuncNotFoundError
 from ranch.order import Order
 from ranch.topic_config import TopicConfig
 import os
 import sys
+import numpy as np
 from argparse import ArgumentParser
 from concurrent.futures import TimeoutError
 from confluent_kafka import KafkaError, KafkaException
 from confluent_kafka.admin import AdminClient
 
 
-def main():
+def arguments():
     parser = ArgumentParser(description='computes configuration parameters for kafka producer based on librdkafka')
 
     parser.add_argument('brokers', help='address of kafka brokers in format host:port[,host:port]')
@@ -22,29 +22,72 @@ def main():
 
     args = parser.parse_args()
 
-    topic_name = args.topic
-    kafka_admin = AdminClient({'bootstrap.servers': args.brokers})
-    message_size = args.message_size
+    return args.topic, args.brokers, args.message_size, args.semantic, args.strict_order
 
+
+def resolve_acks(semantic):
     acks = Acks.ONE
     idempotence = False
-    if args.semantic == 'at-least-once':
+    if semantic == 'at-least-once':
         acks = Acks.ONE
-    elif args.semantic == 'at-most-once':
+    elif semantic == 'at-most-once':
         acks = Acks.NO
     else:
         acks = Acks.ALL
         idempotence = True
 
+    return acks, idempotence
+
+
+def resolve_inflight(strict_order):
     inflight = Order.ANY
-    if args.strict_order:
+    if strict_order:
         inflight = Order.STRICT
     else:
         inflight = Order.ANY
 
+    return inflight
+
+
+def load_funcs():
+    try:
+        basepath = sys._MEIPASS
+    except Exception:
+        basepath = os.path.abspath(".")
+
+    batch_file = 'funcs/batches.npy'
+    linger_file = 'funcs/lingers.npy'
+    batch_file = os.path.join(basepath, batch_file)
+    linger_file = os.path.join(basepath, linger_file)
+    batch_funcs = np.load(batch_file, allow_pickle=True)
+    linger_funcs = np.load(linger_file, allow_pickle=True)
+
+    return batch_funcs.item(), linger_funcs.item()
+
+
+def print_config(brokers, acks, idempotence, inflight, compression_type, max_message, batch_bytes, linger_ms):
+    print(f"bootstrap.servers={brokers}")
+    print(f"acks={acks}")
+    print(f"enable.idempotence={str(idempotence).lower()}")
+    print(f"max.in.flight.requests.per.connection={inflight}")
+    print(f"compression.type={compression_type}")
+    print(f"message.max.bytes={max_message}")
+    print(f"batch.size={batch_bytes}")
+    print(f"linger.ms={linger_ms}")
+
+
+def main():
+    topic_name, brokers, message_size, semantic, strict_order = arguments()
+    kafka_admin = AdminClient({'bootstrap.servers': brokers})
+
+    acks, idempotence = resolve_acks(semantic)
+    inflight = resolve_inflight(strict_order)
+
     topic_config = TopicConfig(kafka_admin, topic_name)
-    batch = Batch()
-    linger = Linger()
+
+    batch_funcs, linger_funcs = load_funcs()
+    batch_interpolation = Interpolation(batch_funcs)
+    linger_interpolation = Interpolation(linger_funcs)
 
     try:
         compression_type = topic_config.get_compression()
@@ -59,21 +102,17 @@ def main():
     except TimeoutError:
         print("timeout while connecting to broker")
         sys.exit(1)
+    except FuncNotFoundError:
+        print("wrong value for acks or inflight")
+        sys.exit(1)
 
-    batch_bytes = batch.get_batch(message_size, acks, inflight)
-    linger_ms = linger.get_linger(message_size, acks, inflight)
+    batch_bytes = batch_interpolation.get_value(message_size, acks, inflight)
+    linger_ms = linger_interpolation.get_value(message_size, acks, inflight)
 
     if batch_bytes > max_message:
         batch_bytes = max_message
 
-    print(f"bootstrap.servers={args.brokers}")
-    print(f"acks={acks.value}")
-    print(f"enable.idempotence={str(idempotence).lower()}")
-    print(f"max.in.flight.requests.per.connection={inflight.value}")
-    print(f"compression.type={compression_type}")
-    print(f"message.max.bytes={max_message}")
-    print(f"batch.size={batch_bytes}")
-    print(f"linger.ms={linger_ms}")
+    print_config(brokers, acks.value, idempotence, inflight.value, compression_type, max_message, batch_bytes, linger_ms)
 
 if __name__ == '__main__':
     main()
