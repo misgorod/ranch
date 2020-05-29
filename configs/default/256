@@ -1,0 +1,4 @@
+bootstrap.servers=testing-kafka-dev01:9092,testing-kafka-dev02:9092,testing-kafka-dev03:9092
+
+acks=-1
+

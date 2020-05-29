@@ -1,0 +1,15 @@
+bootstrap.servers=testing-kafka-dev01:9092,testing-kafka-dev02:9092,testing-kafka-dev03:9092
+
+acks=-1
+
+enable.idempotence=true
+
+max.in.flight.requests.per.connection=5
+
+compression.type=snappy
+
+buffer.memory=9665388
+
+batch.size=546000
+
+linger.ms=47

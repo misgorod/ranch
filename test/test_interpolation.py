@@ -1,7 +1,6 @@
 import pytest
 from ranch.interpolation import Interpolation, FuncNotFoundError
-from ranch.acks import Acks
-from ranch.order import Order
+from ranch.enums import Acks, Order
 
 def mock_func(t):
     return 0

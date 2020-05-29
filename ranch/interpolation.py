@@ -1,6 +1,5 @@
 import os
-from ranch.acks import Acks
-from ranch.order import Order
+from ranch.enums import Acks, Order
 import sys
 
 
